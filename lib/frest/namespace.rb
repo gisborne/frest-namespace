@@ -17,6 +17,9 @@ module Frest
     )
       f               = File.absolute_path(file) #canonicalize connection by full path
       @connections[f] ||= SQLite3::Database.new(f)
+      @connections[f].create_function 'uuid', 0 do |func, value|
+        func.result = SecureRandom.uuid
+      end
     end
 
     def set(
@@ -108,6 +111,7 @@ module Frest
               id UUID NOT NULL,
               key text NOT NULL,
               value text,
+              created date DEFAULT CURRENT_TIMESTAMP,
               PRIMARY KEY(id, key)
             )
           }
