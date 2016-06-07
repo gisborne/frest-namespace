@@ -24,11 +24,19 @@ module Frest
         id:,
         db: DEFAULT_DB,
         values:,
+        insert_values: method(:insert_values),
+        delete_values: method(:delete_values),
         **context)
 
       c = get_connection file: db
 
-      insert_hash = values.clone
+      insert_hash, delete_hash = values.partition{|k, v| v}.map &:to_h
+      insert_values(connection: c, id: id, insert_hash: insert_hash, store_id: store_id, **context)
+      delete_values(connection: c, id: id, keys: delete_hash.keys, store_id: store_id, **context)
+    end
+
+    def insert_values connection:, id:, insert_hash:, store_id:, **context
+      return if insert_hash.count == 0
       insert_hash.each { |k, v|
         insert_hash[k] = prepare_value(value: v, **context)
       }
@@ -39,12 +47,26 @@ module Frest
       end * ",\n"
 
       #TODO respect subtables
-      sql           = %{
-              INSERT OR REPLACE INTO #{store_id}_simple(id, key, value)
-              VALUES#{values_string}
+      sql = %{
+        INSERT OR REPLACE INTO #{store_id}_simple(id, key, value)
+        VALUES#{values_string}
       }
-      p sql
-      c.execute sql
+
+      connection.execute sql
+    end
+
+
+    def delete_values connection:, id:, keys:, store_id:, **context
+      return if keys.count == 0
+      #TODO respect subtables
+      sql = %{
+        DELETE FROM #{store_id}_simple
+        WHERE
+          id = '#{id}' AND
+          key IN (#{keys.map{|k| "'#{k}'"} * ','})
+      }
+
+      connection.execute sql
     end
 
 
