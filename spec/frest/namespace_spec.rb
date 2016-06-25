@@ -14,7 +14,7 @@ describe Frest::Namespace do
     it "can delete an entire hash and it's gone" do
       n.set id: '3ff7bacf-1511-4709-b84f-2427e91b01e8', values: {a: 1}
       n.delete id: '3ff7bacf-1511-4709-b84f-2427e91b01e8'
-      expect(n.get id: '3ff7bacf-1511-4709-b84f-2427e91b01e8').count.to match(0)
+      expect(n.get(id: '3ff7bacf-1511-4709-b84f-2427e91b01e8').count).to match(0)
     end
   end
 end

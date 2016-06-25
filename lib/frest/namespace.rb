@@ -153,10 +153,9 @@ module Frest
               SELECT
                 *
               FROM
-                #{id}_#{subtbl}_src
-                LEFT OUTER JOIN #{id}_#{subtbl}_deleted ON (#{id}_#{subtbl}_deleted.id = #{id}_#{subtbl}_src.id)
+                #{id}_#{subtbl}_src dss
               WHERE
-                #{id}_#{subtbl}_src.id IS NULL",
+                NOT EXISTS (SELECT 1 FROM default_simple_deleted dsd WHERE dsd.id == dss.id)",
             **c_)
 
         sql = %{
