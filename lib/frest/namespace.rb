@@ -31,19 +31,19 @@ module Frest
     end
 
     tap_h def set(
-        values:,
+        value:,
         store_id: DEFAULT_STORE_ID,
         db: DEFAULT_DB,
-        insertfn: method(:insert_values),
+        insertfn: method(:insert_value),
         deletefn: method(:delete),
         c_:,
         **_)
             
-      insert_hash, delete_hash = values.partition { |_, v| v }.map(&:to_h)
+      insert_hash, delete_hash = value.partition { |_, v| v }.map(&:to_h)
       
       insertfn.call(
           store_id: store_id,
-          insert_hash: insert_hash,
+          value: insert_hash,
           **c_)
       
       deletefn.call(
@@ -113,6 +113,7 @@ module Frest
         sql = %{
           CREATE TABLE IF NOT EXISTS #{id}_#{subtbl}_src(
             id UUID NOT NULL,
+            version_id UUID NOT NULL,
             key text NOT NULL,
             value text,
             created date DEFAULT CURRENT_TIMESTAMP,
@@ -126,25 +127,58 @@ module Frest
 
         execute(
             sql: %{
-              CREATE TABLE IF NOT EXISTS #{id}_#{subtbl}_history_src(
+              CREATE TABLE IF NOT EXISTS #{id}_#{subtbl}_versions(
                 id UUID NOT NULL,
-                key text NOT NULL,
-                value text,
+                version_id UUID NOT NULL,
+                sequence_id UUID NOT NULL,
+                previous_id UUID NOT NULL,
                 created DATE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(id, key, created)
+                PRIMARY KEY(id, version_id, sequence_id, previous_id)
+              )
+            },
+            **c
+        )
+
+        execute(
+            sql: %{
+              CREATE TABLE IF NOT EXISTS
+                #{id}_#{subtbl}_branches(
+                  id UUID NOT NULL,
+                  sequence_id UUID NOT NULL,
+                  branched_from UUID NOT NULL,
+                  created DATE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY(id, sequence_id, branched_from)
+                )
+              }
+        )
+
+        execute(
+            sql: %{
+              CREATE UNIQUE INDEX IF NOT EXISTS
+                #{id}_#{subtl}_vers_date
+              ON
+                #{id}_#{subtbl}_versions(sequence_id, created)
+            },
+            **c
+        )
+
+        execute(
+            sql:%{
+              CREATE TABLE IF NOT EXISTS
+                #{id}_#{subtbl}_deleted(
+                  id UUID NOT NULL,
+                  deleted DATE DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY(id)
               )
             },
             **c_)
 
         execute(
-            sql:%{
-              CREATE TABLE IF NOT EXISTS #{id}_#{subtbl}_deleted(
-                id UUID NOT NULL,
-                deleted DATE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(id)
-              )
-            },
-            **c_)
+            sql: %{
+              CREATE VIEW IF NOT EXISTS
+                #{id}_#{subtbl}
+            }
+        )
 
         execute(
             sql: "
@@ -211,7 +245,16 @@ module Frest
         value:,
         c_:,
         **_)
-      "'#{SQLite3::Database.quote(value.to_s)}'"
+      if (value.is_a? Hash)
+        result = uuid
+
+        set(
+          **c_.merge(id: result))
+
+        "'#{result}'"
+      else
+        "'#{SQLite3::Database.quote(value.to_s)}'"
+      end
     end
 
     tap_h def execute(
@@ -229,30 +272,34 @@ module Frest
 
     private
 
-    tap_h def insert_values(
+    tap_h def insert_value(
         id:,
-        insert_hash:,
+        value:,
         store_id:,
         connection: get_connection,
         c_:,
         **_)
-      return if insert_hash.count == 0
-      insert_hash.each { |k, v|
-        insert_hash[k] = prepare_value(value: v, **c_)
+      return if value.count == 0
+      value.each { |k, v|
+        value[k] = prepare_value(**c_.merge(value: v))
       }
 
-      keys_string   = "(id, #{insert_hash.keys * ','})"
-      values_string = insert_hash.map do |k, v|
+      keys_string   = "(id, #{value.keys * ','})"
+      value_string = value.map do |k, v|
         "('#{id}', '#{k}', #{v})"
       end * ",\n"
 
       #TODO respect subtables
       sql = %{
          INSERT OR REPLACE INTO #{store_id}_simple(id, key, value)
-         VALUES#{values_string}
+         values#{value_string}
       }
 
-      connection.execute sql
+      execute sql: sql
+    end
+
+    def uuid
+      SecureRandom.uuid
     end
   end
 end
