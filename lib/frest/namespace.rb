@@ -2,33 +2,15 @@
 require 'sqlite3'
 require 'securerandom'
 require_relative 'tap_h'
+require_relative 'setup'
+require_relative 'defaults'
 
 module Frest
   module Namespace
     include TapH
+    include Defaults
+
     extend self
-
-    @connections = {}
-
-    DEFAULT_SUBTABLES = %w{simple arguments local_fns remote_fns}
-    DEFAULT_DB        = 'default.sqlite'
-    DEFAULT_STORE_ID  = 'default'
-    LOG_SQL           = true
-
-    tap_h def get_connection(
-        file: DEFAULT_DB,
-        c_:,
-        **_
-    )
-      f = File.absolute_path(file) #canonicalize connection by full path
-      @connections[f] ||= SQLite3::Database.new(f)
-      result = @connections[f]
-      result.create_function 'uuid', 0 do |func, value|
-        func.result = SecureRandom.uuid
-      end
-
-      result
-    end
 
     tap_h def set(
         value:,
@@ -100,144 +82,6 @@ module Frest
               id = '#{id}'},
            **c_)
       result.to_h
-    end
-
-
-    tap_h def setup(
-        id: 'default',
-        subtables: DEFAULT_SUBTABLES,
-        c_:,
-        **_)
-
-      subtables.each do |subtbl|
-        sql = %{
-          CREATE TABLE IF NOT EXISTS #{id}_#{subtbl}_src(
-            id UUID NOT NULL,
-            version_id UUID NOT NULL,
-            key text NOT NULL,
-            value text,
-            created date DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY(id, key)
-          )
-        }
-
-        execute(
-            sql: sql,
-            **c_)
-
-        execute(
-            sql: %{
-              CREATE TABLE IF NOT EXISTS #{id}_#{subtbl}_versions(
-                id UUID NOT NULL,
-                version_id UUID NOT NULL,
-                sequence_id UUID NOT NULL,
-                previous_id UUID NOT NULL,
-                created DATE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(id, version_id, sequence_id, previous_id)
-              )
-            },
-            **c
-        )
-
-        execute(
-            sql: %{
-              CREATE TABLE IF NOT EXISTS
-                #{id}_#{subtbl}_branches(
-                  id UUID NOT NULL,
-                  sequence_id UUID NOT NULL,
-                  branched_from UUID NOT NULL,
-                  created DATE DEFAULT CURRENT_TIMESTAMP,
-                  PRIMARY KEY(id, sequence_id, branched_from)
-                )
-              }
-        )
-
-        execute(
-            sql: %{
-              CREATE UNIQUE INDEX IF NOT EXISTS
-                #{id}_#{subtl}_vers_date
-              ON
-                #{id}_#{subtbl}_versions(sequence_id, created)
-            },
-            **c
-        )
-
-        execute(
-            sql:%{
-              CREATE TABLE IF NOT EXISTS
-                #{id}_#{subtbl}_deleted(
-                  id UUID NOT NULL,
-                  deleted DATE DEFAULT CURRENT_TIMESTAMP,
-                  PRIMARY KEY(id)
-              )
-            },
-            **c_)
-
-        execute(
-            sql: %{
-              CREATE VIEW IF NOT EXISTS
-                #{id}_#{subtbl}
-            }
-        )
-
-        execute(
-            sql: "
-              CREATE VIEW IF NOT EXISTS
-                #{id}_#{subtbl} AS
-              SELECT
-                *
-              FROM
-                #{id}_#{subtbl}_src dss
-              WHERE
-                NOT EXISTS (SELECT 1 FROM default_simple_deleted dsd WHERE dsd.id == dss.id)",
-            **c_)
-
-        sql = %{
-          CREATE TRIGGER IF NOT EXISTS
-            #{id}_#{subtbl}_uuid_trigger
-          INSTEAD OF
-            INSERT
-          ON
-            #{id}_#{subtbl}
-          FOR EACH ROW
-          BEGIN
-            INSERT INTO
-              #{id}_#{subtbl}_src(
-                id,
-                key,
-                value)
-              SELECT
-                COALESCE(NEW.id, UUID()),
-                NEW.key,
-                NEW.value;
-          END
-        }
-
-        execute(
-            sql: sql,
-            **c_)
-
-        sql = %{
-          CREATE TRIGGER IF NOT EXISTS
-            #{id}_#{subtbl}_delete_trigger
-          INSTEAD OF
-            DELETE
-          ON
-            #{id}_#{subtbl}
-          FOR EACH ROW
-          BEGIN
-            INSERT INTO
-              #{id}_#{subtbl}_deleted(
-                id)
-              SELECT
-                OLD.id;
-          END
-        }
-
-        execute(
-            sql: sql,
-            **c_)
-      end
     end
 
 
