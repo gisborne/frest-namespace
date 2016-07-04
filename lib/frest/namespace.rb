@@ -22,9 +22,11 @@ module Frest
         **_)
             
       insert_hash, delete_hash = value.partition { |_, v| v }.map(&:to_h)
+      created = Time.now.strftime('%Y-%m-%d %H:%M:%S.%12N')
       
       insertfn.call(
           store_id: store_id,
+          created: created,
           value: insert_hash,
           **c_)
       
@@ -67,6 +69,7 @@ module Frest
     tap_h def get(
         id:,
         store_id: DEFAULT_STORE_ID,
+        branch_id: DEFAULT_BRANCH_ID,
         db: DEFAULT_DB,
         subtables: DEFAULT_SUBTABLES,
         c_:,
@@ -81,7 +84,8 @@ module Frest
             FROM
               #{store_id}_simple
             WHERE
-              id = '#{id}'},
+              id = '#{id}' AND
+              branch_id = '#{branch_id}'},
            **c_)
       result.to_h
     end
@@ -94,8 +98,11 @@ module Frest
       if (value.is_a? Hash)
         result = uuid
 
-        set(
-          **c_.merge(id: result))
+        insert_value(
+          **c_.merge(
+              id: result,
+              table: 'local_fns'
+          ))
 
         "'#{result}'"
       else
@@ -120,9 +127,11 @@ module Frest
 
     tap_h def insert_value(
         id:,
-        branch_id: DEFAULT_BRANCH_ID,
         value:,
         store_id:,
+        created:,
+        table: 'simple',
+        branch_id: DEFAULT_BRANCH_ID,
         connection: get_connection,
         c_:,
         **_)
@@ -131,14 +140,14 @@ module Frest
         value[k] = prepare_value(**c_.merge(value: v))
       }
 
-      keys_string   = "(id, #{value.keys * ','})"
+      keys_string   = "(id, #{value.keys * ','}, created)"
       value_string = value.map do |k, v|
-        "('#{id}', '#{branch_id}', '#{k}', #{v})"
+        "('#{id}', '#{branch_id}', '#{k}', #{v}, '#{created}')"
       end * ",\n"
 
       #TODO respect subtables
       sql = %{
-         INSERT OR REPLACE INTO #{store_id}_simple(id, branch_id, key, value)
+         INSERT INTO #{store_id}_#{table}(id, branch_id, key, value, created)
          values#{value_string}
       }
 

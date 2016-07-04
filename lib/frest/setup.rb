@@ -40,7 +40,8 @@ module Frest
               #{name}_src(
                 id,
                 branch_id,
-                created
+                created,
+                key
               )
           }
         )
@@ -192,9 +193,12 @@ module Frest
             BEGIN
               INSERT INTO
                 #{name}_deleted(
-                  id)
+                  id,
+                  branch_id
+                )
                 SELECT
-                  OLD.id;
+                  OLD.id,
+                  OLD.branch_id;
             END
           },
           **c_

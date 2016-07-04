@@ -32,7 +32,8 @@ module Frest
         **_
     )
       f = File.absolute_path(file) #canonicalize connection by full path
-      @@connections[f] ||= SQLite3::Database.new(f)
+      return @@connections[f] if @@connections[f]
+      @@connections[f] = SQLite3::Database.new(f)
       result = @@connections[f]
       result.create_function 'uuid', 0 do |func, value|
         func.result = SecureRandom.uuid
