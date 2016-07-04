@@ -9,6 +9,7 @@ module Frest
     DEFAULT_SUBTABLES = %w{simple arguments local_fns remote_fns}
     DEFAULT_DB        = 'default.sqlite'
     DEFAULT_STORE_ID  = 'default'
+    DEFAULT_BRANCH_ID = 'root'
     LOG_SQL           = true
 
     @@connections = {}

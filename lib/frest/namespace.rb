@@ -36,6 +36,7 @@ module Frest
 
     tap_h def delete(
         id:,
+        branch_id: DEFAULT_BRANCH_ID,
         db: DEFAULT_DB,
         store_id: DEFAULT_STORE_ID,
         keys: nil,
@@ -49,7 +50,8 @@ module Frest
       sql = %{
         DELETE FROM #{store_id}_simple
         WHERE
-          id = '#{id}'
+          id = '#{id}' AND
+          branch_id = '#{branch_id}'
       }
       sql += %{
         AND
@@ -118,6 +120,7 @@ module Frest
 
     tap_h def insert_value(
         id:,
+        branch_id: DEFAULT_BRANCH_ID,
         value:,
         store_id:,
         connection: get_connection,
@@ -130,12 +133,12 @@ module Frest
 
       keys_string   = "(id, #{value.keys * ','})"
       value_string = value.map do |k, v|
-        "('#{id}', '#{k}', #{v})"
+        "('#{id}', '#{branch_id}', '#{k}', #{v})"
       end * ",\n"
 
       #TODO respect subtables
       sql = %{
-         INSERT OR REPLACE INTO #{store_id}_simple(id, key, value)
+         INSERT OR REPLACE INTO #{store_id}_simple(id, branch_id, key, value)
          values#{value_string}
       }
 
